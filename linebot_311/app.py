@@ -163,8 +163,13 @@ def handle_text(event):
                 for item in user_message.split():
                     if '*' in item:
                         parts = item.rsplit('*', 1)
-                        try: items[parts[0]] = int(parts[1])
-                        except: items[item] = 1
+                        try:
+                            c_cnt = int(parts[1])
+                            if c_cnt <= 0:
+                                continue
+                            items[parts[0]] = c_cnt
+                        except:
+                            items[parts[0]] = 1
                     else: items[item] = 1
 
                 log, error_log = [], []
@@ -376,13 +381,16 @@ def handle_text(event):
                 action_map = {"新增主牌": "main", "新增額外": "extra", "新增備牌": "side", "刪除卡片": "remove"}
                 action_str, deck_name = match.group(1), match.group(2)
                 
-                user_states[user_id] = {"state": "WAIT_ADD_CARD" if "新增" in action_str else "WAIT_REMOVE_CARD", 
-                                        "data": {"type": action_map[action_str], "deck_name": deck_name}}
-                
-                reply_messages.append(TextMessage(
-                    text=f"📝 準備【{action_str}】至牌組：{deck_name}\n\n請直接輸入卡名與數量 (不同卡片請用空格隔開)。\n範例：『青眼白龍*3 融合*1』",
-                    quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="❌ 取消", text="取消"))])
-                ))
+                if deck_name not in user_decks[user_id]:
+                    reply_messages.append(TextMessage(text=f"❌ 找不到牌組【{deck_name}】"))
+                else:
+                    user_states[user_id] = {"state": "WAIT_ADD_CARD" if "新增" in action_str else "WAIT_REMOVE_CARD", 
+                                            "data": {"type": action_map[action_str], "deck_name": deck_name}}
+                    
+                    reply_messages.append(TextMessage(
+                        text=f"📝 準備【{action_str}】至牌組：{deck_name}\n\n請直接輸入卡名與數量 (不同卡片請用空格隔開)。\n範例：『青眼白龍*3 融合*1』",
+                        quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="❌ 取消", text="取消"))])
+                    ))
 
             elif match := re.match(r'^(繼續編輯|查看特定牌組) (.+)$', user_message):
                 cmd_type, deck_name = match.group(1), match.group(2)
@@ -442,6 +450,8 @@ def handle_image(event):
         try:
             response = client.models.generate_content(model=MODEL_ID, contents=[prompt, img], config=types.GenerateContentConfig(tools=[{"google_search": {}}], system_instruction="你是一位專精「遊戲王 OCG 賽制」的裁判。現在是2026年。"))
             reply_text = response.text
+            if reply_text is None:
+                reply_text = "辨識失敗，無法取得回應內容。"
         except Exception as e:
             reply_text = f"辨識失敗，錯誤：{str(e)}"
         line_bot_api.reply_message_with_http_info(ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply_text)]))
